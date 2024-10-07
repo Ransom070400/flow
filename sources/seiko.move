@@ -1,66 +1,61 @@
-module 0xYourAddress::simple_token_transfer_with_history {
-    use sui::coin::{Self, TreasuryCap};
+module mytoken::mycoin {
+    use sui::coin::{Self, TreasuryCap, Coin};
     use sui::transfer;
     use sui::tx_context::TxContext;
+    use sui::event::emit;
+    use sui::balance::{Self, Balance};
 
     // Define the token struct
-    public struct MY_TOKEN has drop {}
+    public struct MYCOIN has drop {}
 
-    // Define a struct to store transaction details
-    struct TransactionHistory has key {
-        sender: address,
-        recipient: address,
+     const FLOAT_SCALING: u64 = 1_000_000_000;
+
+    // Define the transfer event struct
+
+       public struct LendingPool has key, store {
+        id: UID,
+        coin_supply: Balance<MYCOIN>,
+        treasury_cap: TreasuryCap<MYCOIN>,
+    }
+
+    public struct TransferEvent has copy, drop {
+        from: address,
+        to: address,
         amount: u64,
-        timestamp: u64,
     }
 
-    // Define a table to store transaction histories
-    struct HistoryTable has key {
-        histories: vector<TransactionHistory>,
-    }
-
-    // Initialize the token and history table
-    public fun init(ctx: &mut TxContext) {
-        let (treasury, metadata) = coin::create_currency<MY_TOKEN>(
-            6, // Decimals
-            b"MY_TOKEN", // Token name
-            b"MTK", // Token symbol
-            b"", // Description
-            option::none(), // Icon URL
+    // Initialize the token
+     fun init(witness: MYCOIN, ctx: &mut TxContext) {
+      let (treasury_cap, metadata) = coin::create_currency<MYCOIN>(
+            witness, 
+            9, 
+            b"MY_TOKEN",
+            b"Coin", 
+            b"Native Coin", 
+            option::none(), 
             ctx
         );
-        transfer::public_freeze_object(metadata);
-        transfer::public_transfer(treasury, ctx.sender());
 
-        // Initialize the history table
-        let history_table = HistoryTable { histories: vector::empty<TransactionHistory>() };
-        transfer::public_transfer(history_table, ctx.sender());
-    }
+      transfer::public_transfer(treasury_cap, tx_context::sender(ctx));
+      transfer::public_share_object(metadata);
+  }
 
     // Mint new tokens
-    public fun mint(treasury: &TreasuryCap<MY_TOKEN>, amount: u64, ctx: &mut TxContext) {
-        coin::mint(treasury, amount, ctx.sender(), ctx);
-    }
+     public fun mint_token(cap: &mut TreasuryCap<MYCOIN>, ctx: &mut TxContext, amount: u64): Coin<MYCOIN>{
+    let minted_coin = coin::mint(cap, amount * FLOAT_SCALING, ctx);
+   // transfer::public_transfer(minted_coin, tx_context::sender(ctx));
+    minted_coin
+}
+    // Mint new tokens
+    public fun send(sender_balance: &mut LendingPool, recipient: address, amount: u64, ctx: &mut TxContext) {
+        let coin_send = coin::take(&mut sender_balance.coin_supply, amount, ctx);
+        transfer::public_transfer(coin_send, recipient);
 
-    // Transfer tokens and record the transaction
-    public fun transfer(recipient: address, amount: u64, ctx: &mut TxContext) {
-        let coin = coin::withdraw<MY_TOKEN>(ctx.sender(), amount, ctx);
-        transfer::public_transfer(coin, recipient);
-
-        // Record the transaction
-        let history_table = borrow_global_mut<HistoryTable>(ctx.sender());
-        let transaction = TransactionHistory {
-            sender: ctx.sender(),
-            recipient: recipient,
-            amount: amount,
-            timestamp: ctx.timestamp(),
-        };
-        vector::push_back(&mut history_table.histories, transaction);
-    }
-
-    // Get transaction history
-    public fun get_transaction_history(owner: address): vector<TransactionHistory> {
-        let history_table = borrow_global<HistoryTable>(owner);
-        history_table.histories
+        // Emit transfer event
+        emit(TransferEvent {
+            from: ctx.sender(),
+            to: recipient,
+            amount,
+        });
     }
 }
