@@ -46,16 +46,4 @@ module mytoken::mycoin {
    // transfer::public_transfer(minted_coin, tx_context::sender(ctx));
     minted_coin
 }
-    // Mint new tokens
-    public fun send(sender_balance: &mut LendingPool, recipient: address, amount: u64, ctx: &mut TxContext) {
-        let coin_send = coin::take(&mut sender_balance.coin_supply, amount, ctx);
-        transfer::public_transfer(coin_send, recipient);
-
-        // Emit transfer event
-        emit(TransferEvent {
-            from: ctx.sender(),
-            to: recipient,
-            amount,
-        });
-    }
-}
+    
